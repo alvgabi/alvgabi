@@ -1,0 +1,117 @@
+import streamlit as st
+import requests 
+import pandas as pd
+import plotly.express as px
+
+#coloca por padrão a configuração wide
+st.set_page_config(layout= 'wide')
+
+#formatando os números
+def formata_num(valor, prefixo = ''):
+    for unidade in ["", "K"]:
+        if valor < 1000:
+            return f'{prefixo} {valor:.2f} {unidade}'
+        valor/=1000
+    return f'{prefixo} {valor:.2f} MM'
+    
+st.title('DASHBOARD DE VENDAS :shopping_trolley:')
+
+url = 'http://labdados.com/produtos'
+response = requests.get(url)
+dados = pd.DataFrame.from_dict(response.json())
+dados['Data da Compra'] =  pd.to_datetime(dados['Data da Compra'], format= '%d/%m/%Y')
+
+#Tabelas
+###Tabelas de Receita
+#Agrupa os dados por mês 
+receita_mensal = dados.set_index('Data da Compra').groupby(pd.Grouper(freq= 'M'))['Preço'].sum().reset_index()
+receita_mensal['Ano'] = receita_mensal['Data da Compra'].dt.year
+receita_mensal['Mês'] = receita_mensal['Data da Compra'].dt.month_name()
+receita_categoria = dados.groupby('Categoria do Produto')[['Preço']].sum().sort_values('Preço', ascending= False)
+
+###Tabelas de Quantidade de Vendas
+
+
+###Tabelas Vendedores
+vendedores = pd.DataFrame(dados.groupby('Vendedor')['Preço'].agg(['sum', 'count'])) #agrupa os dados de vendas e conta os valores
+
+#grafico Barras
+fig_receita_mensal = px.bar(receita_mensal,
+                            x= 'Mês',
+                            y= 'Preço',
+                            range_y= (0, receita_mensal.max()),
+                            color = 'Ano',
+                            title= 'Receita Mensal')
+fig_receita_mensal.update_layout(yaxis_title = "Receita")
+
+fig_receita_linha = px.line(receita_mensal,
+                            x= 'Mês',
+                            y= 'Preço',
+                            markers= True,
+                            range_y= (0, receita_mensal.max()),
+                            color = 'Ano',
+                            title= 'Receita Mensal Linha')
+fig_receita_linha.update_layout(yaxis_title = "Receita")
+
+#treemap
+#fid_receita_categoria = px.treemap(receita_categoria,
+#                                   path=[px.Constant('Categoria do Produto'), 'Produto'],
+#                                   values='Preço'                            
+#                         )
+
+
+
+#Visualização de Abas
+aba1, aba2, aba3 = st.tabs(['Receita', 'Quantidade de Vendas', 'Vendedores'])
+
+with aba1:
+    col1,col2,  = st.columns(2)
+    with col1:
+        st.metric('Receita', formata_num(dados['Preço'].sum(), 'R$')) #card
+        st.plotly_chart(fig_receita_mensal, use_container_width= True)
+    with col2:
+        st.metric('Quantidade de Vendas', formata_num(dados.shape[0])) #card
+        st.plotly_chart(fig_receita_linha, use_container_width= True)
+    #with col3:
+    #st.plotly_chart(fid_receita_categoria, use_container_width= True)
+
+
+with aba2:
+    col1,col2,  = st.columns(2)
+    with col1:
+        st.metric('Receita', formata_num(dados['Preço'].sum(), 'R$')) #card
+     
+    with col2:
+        st.metric('Quantidade de Vendas', formata_num(dados.shape[0])) #card
+ 
+
+with aba3:
+    qtd_vendedores = st.number_input('Quantidade de Vendedores',2, 10, 5)
+
+    col1,col2,  = st.columns(2)
+    with col1:
+        fig_receita_vendedores = px.bar(vendedores[['sum']].sort_values('sum', ascending = False).head(qtd_vendedores),
+                                        x= 'sum',
+                                        y=vendedores[['sum']].sort_values('sum', ascending = False).head(qtd_vendedores).index,
+                                        text_auto= True,
+                                        title= f'Top {qtd_vendedores} vendedores (receita)')
+        st.plotly_chart(fig_receita_vendedores)
+
+        
+    with col2:
+        fig_vendas_vendedores = px.bar(vendedores[['sum']].sort_values('sum', ascending = False).head(qtd_vendedores),
+                                        x= 'sum',
+                                        y=vendedores[['sum']].sort_values('sum', ascending = False).head(qtd_vendedores).index,
+                                        text_auto= True,
+                                        title= f'Top {qtd_vendedores} vendedores (receita)')
+        st.plotly_chart(fig_vendas_vendedores)  ### Falta a tabela 7:59mm
+
+
+
+
+
+#Tabela - remover depois
+st.dataframe(dados)
+
+
+
